@@ -53,6 +53,27 @@ proc updateOffset*(p: ptr LogLexer) =
   p.offsetBase += p.bufpos
   p.bufpos = 0
 
+##
+proc read(p: LogLexer, size: uint): seq[char] =
+  var counter: uint = 0
+  var data = newSeq[char]()
+  var pos = p.getPosition()
+  while counter < size:
+    data.add(p.buf[pos])
+    inc(pos)
+    inc(counter)
+  return data
+
+##
+proc findNext(p: LogLexer, chr: char): int =
+  var pos = p.getPosition()
+  let original_position = pos
+  var curr = p.buf[pos]
+  while curr != chr:
+    inc(pos)
+    curr = p.buf[pos]
+  return (pos - original_position)
+
 ## Peek the contents of the next line.
 ##   First will read up until encountering a newline character
 ##   or EoF, which-ever comes first. If it is EoF, then return
@@ -61,13 +82,9 @@ proc updateOffset*(p: ptr LogLexer) =
 ##   length from the current position to start of the next line,
 ##   as well as the contents of the next line as a string.
 proc peekLine*(p: LogLexer): (Offset, string) =
-  var pos: int = p.getPosition()
-  let original_position = pos
-  while not (p.buf[pos] in NewLinesAndEoF):
-    inc(pos)
-    #debug("skipping: " & p.buf[pos])
-  inc(pos)
-  var line_end = pos
+  var pos = p.getPosition()
+  var original_position = pos
+  var line_end = p.findNext('\n')
   if line_end >= p.bufLen:
     error("hit end of file before hitting a new line!")
     return (Offset(pos: pos - original_position, len: line_end - pos), "")
@@ -78,6 +95,7 @@ proc peekLine*(p: LogLexer): (Offset, string) =
     Offset(pos: pos - original_position, len: line_end - pos),
     ($p.buf)[pos..line_end])
 
+##
 proc peekCurLine*(p: LogLexer): (Offset, string) =
   var pos: int = p.getPosition()
   let original_position = pos
@@ -113,7 +131,7 @@ proc peekChar*(p: LogLexer): char =
 ##  4 space character indents.
 proc isLineIndented*(p: LogLexer): bool =
   var pos: int = p.getPosition()
-  while p.buf[pos] in {' '}:
+  while p.buf[pos] == ' ':
     inc(pos)
     debug("found a space!")
   let length = pos - p.getPosition()
@@ -139,6 +157,7 @@ proc readWord*(p: LogLexer): int =
   dec(pos)
   return pos
 
+##
 proc resetToStartOfLine(p: LogLexer): int =
   var pos = p.getPosition()
   var prev: char = ' '
@@ -162,24 +181,24 @@ proc prettyParse*(input: Stream, fileLength: int,
 
     var lines_count = 0
     var matched_lines = 0
-    var child_lines = 0
 
     while p.getPosition() < p.bufLen and
       p.buf[p.getPosition()] != lexbase.EndOfFile:
 
       info("at position " & $p.getPosition() & " of " & $p.bufLen)
+      #[
       if p.isLineIndented():
         warn("current line is indented...")
         let (next, line) = p.peekLine()
         warn("from " & $p.getPosition())
-        p.bufpos = next.len + 1
+        p.bufpos = next.len
         updateOffset(addr p)
         warn("to " & $p.getPosition())
         inc(lines_count)
         inc(child_lines)
         data.add(line)
         continue
-
+      ]#
       let (offset, peek_line) = p.peekCurLine()
       debug(peek_line)
       var matches: array[re.MaxSubpatterns, string]
@@ -197,8 +216,7 @@ proc prettyParse*(input: Stream, fileLength: int,
 
     error("counted " & $lines_count & " lines...")
     error("matched " & $matched_lines & " lines...")
-    error("child " & $child_lines & " lines...")
-    success = ((matched_lines + child_lines) == lines_count)
+    success = (matched_lines == lines_count)
 
     # end
   finally:
