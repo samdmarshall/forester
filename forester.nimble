@@ -1,5 +1,5 @@
 # Package
-version = "0.1"
+version = "0.1.0"
 author = "Samantha Marshall"
 description = "application for piping data into InfluxDB"
 license = "BSD 3-Clause"
@@ -8,8 +8,6 @@ srcDir = "src/"
 
 bin = @["forester"]
 
-skipExt = @["nim"]
-
 # Dependencies
-requires "nim >= 0.14.0"
-requires "influx"
+requires "nim >= 0.19.0"
+
